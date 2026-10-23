@@ -1,0 +1,655 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Agente de Riego</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: the field canvas on the left, an instrument panel on the right, then the agent's code and its log side by side. */
+:root {
+  --bg: #dde8e4;
+  --ink: #1b2927;
+  --ink-soft: #506360;
+  --panel: #f5f9f7;
+  --line: #b7c7c2;
+  --water: #1b78bf;
+  --water-soft: #cfe6f6;
+  --dry: #b4640d;
+  --code-bg: #1b2927;
+  --code-fg: #d9e7e2;
+  --display: "Bricolage Grotesque", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.5 var(--display);
+  padding-block: 20px 32px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.page { max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+h1 { margin: 0; font-size: clamp(28px, 4.2vw, 40px); line-height: 1.05; font-weight: 750; letter-spacing: -0.02em; text-wrap: balance; }
+.sub { margin: 6px 0 0; max-width: 62ch; color: var(--ink-soft); }
+h2 { margin: 0 0 8px; font-size: 17px; font-weight: 650; letter-spacing: -0.01em; }
+
+.stage { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+.field { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; line-height: 0; background: #a9c98b; }
+#cv { display: block; width: 100%; max-width: 100%; aspect-ratio: 8 / 5; }
+
+.dash { display: flex; flex-direction: column; gap: 16px; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+.lab { font: 500 11px/1.3 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); display: flex; justify-content: space-between; gap: 8px; }
+.lab output { color: var(--ink); font-weight: 600; letter-spacing: 0; }
+
+.big { font: 750 64px/1 var(--display); letter-spacing: -0.03em; font-variant-numeric: tabular-nums; margin: 6px 0 12px; }
+.big small { font-size: 26px; font-weight: 600; color: var(--ink-soft); margin-left: 2px; }
+.meter { position: relative; height: 16px; border-radius: 8px; background: #d5e1dd; }
+.meter i { display: block; height: 100%; width: 20%; border-radius: 8px; background: var(--dry); transition: background 0.2s; }
+.meter i.ok { background: var(--water); }
+.meter u { position: absolute; left: 40%; top: -4px; width: 2px; height: 24px; background: var(--ink); text-decoration: none; }
+.scale { position: relative; height: 18px; margin-top: 8px; font: 500 11px/1 var(--mono); color: var(--ink-soft); display: flex; justify-content: space-between; }
+.scale .th { position: absolute; left: 40%; transform: translateX(-50%); color: var(--ink); white-space: nowrap; }
+
+.dec { margin-top: 6px; font: 600 17px/1.2 var(--mono); }
+.dec.on { color: var(--water); }
+.dec.off { color: var(--ink); }
+.stat { margin-top: 4px; font-size: 14px; color: var(--ink-soft); }
+
+input[type="range"] { width: 100%; margin: 10px 0 0; accent-color: var(--water); }
+.presets { margin-top: 8px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+.preset { font: 600 13px/1.2 var(--mono); padding: 10px 6px; border: 1px solid var(--line); background: #fff; color: var(--ink); border-radius: 8px; cursor: pointer; font-variant-numeric: tabular-nums; }
+.preset:hover { background: var(--water-soft); }
+.preset:active { transform: translateY(1px); }
+.preset:focus-visible, input:focus-visible + span { outline: 2px solid var(--water); outline-offset: 2px; }
+input[type="range"]:focus-visible, input[type="checkbox"]:focus-visible { outline: 2px solid var(--water); outline-offset: 3px; }
+
+.chk { display: flex; align-items: center; gap: 8px; font-weight: 600; cursor: pointer; }
+.chk input { width: 18px; height: 18px; margin: 0; accent-color: var(--water); }
+.seg { margin-top: 10px; display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #fff; }
+.seg label { position: relative; display: block; }
+.seg input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.seg span { display: block; text-align: center; padding: 8px 0; font: 500 13px/1 var(--mono); }
+.seg input:checked + span { background: var(--ink); color: #fff; }
+.seg input:disabled + span { opacity: 0.45; }
+.hint { margin: 8px 0 0; font-size: 13px; color: var(--ink-soft); }
+
+.under { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.under > div { min-width: 0; }
+.code { background: var(--code-bg); color: var(--code-fg); border-radius: 12px; padding: 14px 16px; font: 500 13px/1.75 var(--mono); overflow-x: auto; }
+.ln { white-space: pre; margin-inline: -16px; padding-inline: 16px; }
+.ln.ev { background: rgba(143, 208, 255, 0.08); }
+.ln.on { background: rgba(143, 208, 255, 0.24); }
+.k { color: #8fd0ff; }
+.s { color: #f3c477; }
+.n { color: #b5e0a2; }
+.note { margin: 8px 0 0; font-size: 13px; color: var(--ink-soft); max-width: 62ch; }
+.log { list-style: none; margin: 0; padding: 0; max-height: 292px; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; font: 400 13px/1.55 var(--mono); }
+.log li { display: flex; flex-direction: column; padding: 8px 14px; border-bottom: 1px dashed var(--line); }
+.log li:last-child { border-bottom: 0; }
+.log .d { font-weight: 600; }
+.log .on .d { color: var(--water); }
+.log .off .d { color: var(--ink-soft); }
+
+@media (max-width: 860px) {
+  .stage, .under { grid-template-columns: minmax(0, 1fr); }
+  .big { font-size: 56px; }
+}
+</style>
+
+<div class="page">
+  <header>
+    <h1>Agente de riego</h1>
+    <p class="sub">Un agente reactivo simple lee la humedad y el sensor de lluvia cada segundo, y decide al instante. Cambia las condiciones y mira qué hace.</p>
+  </header>
+
+  <div class="stage">
+    <div class="field"><canvas id="cv" role="img" aria-label="Parcela con un agricultor que abre la llave de riego cuando la humedad baja de 40 por ciento y no llueve"></canvas></div>
+
+    <aside class="dash">
+      <div>
+        <div class="lab">Humedad del suelo</div>
+        <div class="big"><span id="hv">20</span><small>%</small></div>
+        <div class="meter" aria-hidden="true"><i id="bar" style="width:20%"></i><u></u></div>
+        <div class="scale" aria-hidden="true"><span>0</span><span class="th">umbral 40%</span><span>100</span></div>
+      </div>
+
+      <div>
+        <div class="lab">Decisión del agente</div>
+        <div id="dec" class="dec off">Esperando lectura</div>
+        <div id="stat" class="stat">En reposo</div>
+      </div>
+
+      <div>
+        <label class="lab" for="sl">Cambiar humedad <output id="slo" for="sl">20%</output></label>
+        <input id="sl" type="range" min="0" max="100" step="1" value="20">
+      </div>
+
+      <div>
+        <label class="chk" for="lluvia"><input id="lluvia" type="checkbox"> Está lloviendo</label>
+      </div>
+
+      <div>
+        <div class="lab">Casos de tu código</div>
+        <div class="presets">
+          <button class="preset" type="button" data-v="39" data-r="1">39 · con lluvia</button>
+          <button class="preset" type="button" data-v="39" data-r="0">39 · sin lluvia</button>
+          <button class="preset" type="button" data-v="41" data-r="1">41 · con lluvia</button>
+          <button class="preset" type="button" data-v="41" data-r="0">41 · sin lluvia</button>
+        </div>
+      </div>
+
+      <div>
+        <label class="chk" for="sol"><input id="sol" type="checkbox" checked> Sol secando la parcela</label>
+        <div class="seg" role="radiogroup" aria-label="Velocidad de secado">
+          <label><input type="radio" name="vel" value="0.4"><span>Lento</span></label>
+          <label><input type="radio" name="vel" value="0.8" checked><span>Normal</span></label>
+          <label><input type="radio" name="vel" value="2.5"><span>Rápido</span></label>
+        </div>
+        <p class="hint">Con el sol apagado, la humedad queda donde la dejes. Los casos de prueba lo apagan por ti. Mientras llueve, el sol no seca y la lluvia moja el suelo.</p>
+      </div>
+    </aside>
+  </div>
+
+  <section class="under">
+    <div>
+      <h2>Tu función en ejecución</h2>
+      <div class="code" aria-label="Código de la función agente_riego">
+        <div class="ln"><span class="k">def</span> agente_riego(humedad, lluvia):</div>
+        <div class="ln">  <span class="k">print</span>(<span class="s">f"Humedad detectada: {humedad}%"</span>)</div>
+        <div class="ln">  <span class="k">print</span>(<span class="s">f"Esta lloviendo? {lluvia}"</span>)</div>
+        <div class="ln"> </div>
+        <div class="ln ev" id="l-if">  <span class="k">if</span> humedad &lt; <span class="n">40</span> <span class="k">and</span> lluvia == <span class="k">True</span>:</div>
+        <div class="ln" id="l-a1">      accion = <span class="s">"NO REGAR"</span></div>
+        <div class="ln" id="l-elif">  <span class="k">elif</span> humedad &lt; <span class="n">40</span>:</div>
+        <div class="ln" id="l-a2">      accion = <span class="s">"REGAR"</span></div>
+        <div class="ln" id="l-else">  <span class="k">else</span>:</div>
+        <div class="ln" id="l-a3">      accion = <span class="s">"NO REGAR"</span></div>
+        <div class="ln"> </div>
+        <div class="ln">  <span class="k">print</span>(<span class="s">f"Decisión del agente: {accion}"</span>)</div>
+        <div class="ln">  <span class="k">return</span> accion</div>
+      </div>
+      <p class="note">El juego ejecuta esta misma lógica en JavaScript, una vez por segundo. La línea resaltada es la rama que el agente tomó en la última lectura.</p>
+    </div>
+    <div>
+      <h2>Registro del agente</h2>
+      <ol id="log" class="log"></ol>
+    </div>
+  </section>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var W = 800, H = 500, K = 1;
+  var UMBRAL = 40;
+  var ACTIVAR = 'REGAR', NO_REGAR = 'NO REGAR';
+
+  // Misma lógica que tu función agente_riego(humedad, lluvia), sin memoria: solo reacciona a lo que lee ahora.
+  var rama = 3;
+  function agenteRiego(humedad, lluvia) {
+    var accion;
+    if (humedad < UMBRAL && lluvia === true) {
+      accion = NO_REGAR; rama = 1;
+    } else if (humedad < UMBRAL) {
+      accion = ACTIVAR; rama = 2;
+    } else {
+      accion = NO_REGAR; rama = 3;
+    }
+    return accion;
+  }
+
+  var $ = function (id) { return document.getElementById(id); };
+  var cv = $('cv'), ctx = cv.getContext('2d');
+  var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Geometría de la parcela y puntos del agente
+  var P = { x: 150, y: 80, w: 620, h: 340, cols: 6, rows: 4 };
+  var POST = { x: 101, y: 152 };   // frente a la llave
+  var HOME = { x: 74, y: 374 };    // bajo el árbol
+  var HX = [P.x + P.w / 6, P.x + P.w / 2, P.x + P.w * 5 / 6];
+  var HY = [P.y + P.h / 4, P.y + P.h * 3 / 4];
+  var HEADS = [];
+  HY.forEach(function (y) { HX.forEach(function (x) { HEADS.push({ x: x, y: y }); }); });
+
+  var PL = [];
+  (function () {
+    for (var r = 0; r < 4; r++) {
+      for (var i = 0; i < 12; i++) {
+        var n = Math.abs(Math.sin((r * 12 + i + 1) * 12.9898) * 43758.5453);
+        n = n - Math.floor(n);
+        PL.push({
+          x: P.x + (i + 0.5) * P.w / 12 + (r % 2 ? 4 : -4),
+          y: P.y + (r + 0.64) * P.h / 4 + (n - 0.5) * 6,
+          s: 0.9 + 0.2 * n,
+          d: (r * 12 + i) % 2 ? 1 : -1
+        });
+      }
+    }
+  })();
+
+  var S = {
+    h: 20, reading: 20, rain: false, rainA: 0, evap: true, rate: 0.8,
+    decision: null, irrigating: false, spray: 0, wheel: 0,
+    ax: HOME.x, ay: HOME.y, face: 1, moving: false,
+    t: 0, sense: 0, hpS: 0, parts: [], drops: []
+  };
+  S.hpS = healthTarget();
+
+  function healthTarget() {
+    return S.h >= UMBRAL ? 1 : Math.max(0, S.h / UMBRAL) * 0.8;
+  }
+
+  // ---------- Utilidades de dibujo ----------
+  function hex(c) { return [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16)]; }
+  function mix(a, b, t) {
+    var A = hex(a), B = hex(b); t = Math.max(0, Math.min(1, t));
+    return 'rgb(' + Math.round(A[0] + (B[0] - A[0]) * t) + ',' + Math.round(A[1] + (B[1] - A[1]) * t) + ',' + Math.round(A[2] + (B[2] - A[2]) * t) + ')';
+  }
+  function rr(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+  function line(x1, y1, x2, y2) { ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); }
+  function circle(x, y, r) { ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832); ctx.fill(); }
+
+  function fit() {
+    var r = cv.getBoundingClientRect();
+    if (!r.width) return;
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    cv.width = Math.round(r.width * dpr);
+    cv.height = Math.round(r.width * H / W * dpr);
+    K = cv.width / W;
+  }
+
+  // ---------- Escena ----------
+  function drawSun() {
+    var cx = 752, cy = 38, r = 16;
+    ctx.save();
+    ctx.globalAlpha = (S.evap ? 1 : 0.3) * (1 - 0.8 * S.rainA);
+    ctx.strokeStyle = '#f0a81c'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    var rot = reduce ? 0 : S.t * 0.4;
+    for (var i = 0; i < 10; i++) {
+      var a = rot + i * 0.6283;
+      line(cx + Math.cos(a) * (r + 5), cy + Math.sin(a) * (r + 5), cx + Math.cos(a) * (r + 11), cy + Math.sin(a) * (r + 11));
+    }
+    ctx.fillStyle = '#f6bf2f'; circle(cx, cy, r);
+    ctx.restore();
+  }
+
+  function drawTree() {
+    var x = 40, y = 392;
+    ctx.fillStyle = 'rgba(0,0,0,.14)'; ctx.beginPath(); ctx.ellipse(x + 8, y + 26, 34, 8, 0, 0, 6.2832); ctx.fill();
+    ctx.fillStyle = '#7a5535'; rr(x - 5, y - 2, 10, 28, 3); ctx.fill();
+    ctx.fillStyle = '#357a35'; circle(x + 15, y - 8, 19);
+    ctx.fillStyle = '#4a9a46'; circle(x - 14, y - 8, 18);
+    ctx.fillStyle = '#3f8a3e'; circle(x, y - 22, 27);
+  }
+
+  function drawField() {
+    var t = Math.pow(Math.min(S.h, 100) / 100, 0.85);
+    ctx.fillStyle = mix('#d2a86f', '#3d2616', t);
+    rr(P.x, P.y, P.w, P.h, 8); ctx.fill();
+
+    // surcos
+    ctx.save();
+    rr(P.x, P.y, P.w, P.h, 8); ctx.clip();
+    ctx.strokeStyle = 'rgba(0,0,0,.10)'; ctx.lineWidth = 2;
+    for (var r = 0; r < 4; r++) {
+      var y = P.y + (r + 0.64) * P.h / 4 + 6;
+      line(P.x, y, P.x + P.w, y);
+    }
+    // zonas mojadas bajo cada aspersor
+    if (S.spray > 0.02) {
+      HEADS.forEach(function (h) {
+        var g = ctx.createRadialGradient(h.x, h.y, 6, h.x, h.y, 100);
+        g.addColorStop(0, 'rgba(20,70,120,' + (0.30 * S.spray) + ')');
+        g.addColorStop(1, 'rgba(20,70,120,0)');
+        ctx.fillStyle = g; ctx.fillRect(h.x - 100, h.y - 100, 200, 200);
+      });
+    }
+    ctx.restore();
+
+    ctx.strokeStyle = '#6a4a2c'; ctx.lineWidth = 6;
+    rr(P.x, P.y, P.w, P.h, 8); ctx.stroke();
+  }
+
+  function leaf(x, y, ang, len, col) {
+    ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
+    ctx.fillStyle = col;
+    ctx.beginPath(); ctx.ellipse(len / 2, 0, len / 2, len * 0.3, 0, 0, 6.2832); ctx.fill();
+    ctx.restore();
+  }
+
+  function plant(p) {
+    var hp = S.hpS;
+    var sc = p.s * (0.85 + 0.2 * Math.min(1, S.h / 100) + 0.12 * Math.max(0, (S.h - 50) / 50));
+    var h1 = 26 * sc * (0.55 + 0.45 * hp);
+    var droop = (1 - hp) * 13 * sc * p.d;
+    var tx = p.x + droop, ty = p.y - h1;
+    ctx.strokeStyle = mix('#8c7a3b', '#2f7d32', hp); ctx.lineWidth = 2.6; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.quadraticCurveTo(p.x + droop * 0.15, p.y - h1 * 0.75, tx, ty); ctx.stroke();
+    var col = mix('#b8a24a', '#46a64a', hp);
+    var a = 1.15 - 1.6 * hp;
+    var mx = p.x + droop * 0.1, my = p.y - h1 * 0.45;
+    leaf(mx, my, a, 9 * sc, col); leaf(mx, my, Math.PI - a, 9 * sc, col);
+    leaf(tx, ty + 2, a * 0.8, 8 * sc, col); leaf(tx, ty + 2, Math.PI - a * 0.8, 8 * sc, col);
+    if (hp > 0.98) { ctx.fillStyle = '#f2c230'; circle(tx, ty - 1, 2.6 * sc); }
+  }
+
+  function drawPipes() {
+    var path = new Path2D();
+    path.moveTo(116, 136); path.lineTo(128, 136); path.lineTo(128, HY[1]);
+    HY.forEach(function (y) { path.moveTo(128, y); path.lineTo(HX[2], y); });
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#5d7073'; ctx.lineWidth = 9; ctx.stroke(path);
+    ctx.strokeStyle = '#a9bbbd'; ctx.lineWidth = 5; ctx.stroke(path);
+    if (S.spray > 0.05) {
+      ctx.save();
+      ctx.globalAlpha = S.spray; ctx.strokeStyle = '#1b78bf'; ctx.lineWidth = 3;
+      ctx.setLineDash([8, 8]); ctx.lineDashOffset = -S.t * 50; ctx.stroke(path);
+      ctx.restore();
+    }
+    HEADS.forEach(function (h) {
+      ctx.fillStyle = '#5d7073'; circle(h.x, h.y, 7);
+      ctx.fillStyle = S.spray > 0.5 ? '#1b78bf' : '#a9bbbd'; circle(h.x, h.y, 3.5);
+    });
+  }
+
+  function drawValve() {
+    ctx.fillStyle = '#7d8f91'; rr(86, 128, 30, 18, 3); ctx.fill();
+    ctx.strokeStyle = '#5d7073'; ctx.lineWidth = 4; line(101, 128, 101, 120);
+    ctx.save();
+    ctx.translate(101, 118); ctx.rotate(S.wheel);
+    ctx.strokeStyle = S.irrigating ? '#1b78bf' : '#4f6164'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(0, 0, 10, 0, 6.2832); ctx.stroke();
+    ctx.lineWidth = 2;
+    line(-10, 0, 10, 0); line(0, -10, 0, 10);
+    ctx.restore();
+    ctx.fillStyle = '#2d3f3d'; ctx.font = '600 9px "IBM Plex Mono", monospace'; ctx.textAlign = 'center';
+    ctx.fillText('LLAVE', 101, 100);
+  }
+
+  function drawSensor() {
+    ctx.strokeStyle = '#5d7073'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+    line(720, 398, 720, 436);
+    ctx.fillStyle = '#1b2927'; rr(672, 436, 96, 38, 6); ctx.fill();
+    var low = Math.round(S.h) < UMBRAL;
+    ctx.fillStyle = '#8fa6a1'; ctx.font = '500 9px "IBM Plex Mono", monospace'; ctx.textAlign = 'left';
+    ctx.fillText('SENSOR', 680, 450);
+    ctx.fillStyle = low ? '#f3b34a' : '#7fd0ff'; ctx.font = '600 20px "IBM Plex Mono", monospace'; ctx.textAlign = 'right';
+    ctx.fillText(Math.round(S.h) + '%', 760, 467);
+    ctx.fillStyle = '#1b2927'; rr(560, 436, 100, 38, 6); ctx.fill();
+    ctx.fillStyle = '#8fa6a1'; ctx.font = '500 9px "IBM Plex Mono", monospace'; ctx.textAlign = 'left';
+    ctx.fillText('LLUVIA', 568, 450);
+    ctx.fillStyle = S.rain ? '#7fd0ff' : '#8fa6a1'; ctx.font = '600 20px "IBM Plex Mono", monospace'; ctx.textAlign = 'right';
+    ctx.fillText(S.rain ? 'SÍ' : 'NO', 652, 467);
+  }
+
+  function drawParticles() {
+    ctx.fillStyle = '#4aa6e6';
+    for (var i = 0; i < S.parts.length; i++) {
+      var q = S.parts[i], a = 1 - q.l / q.max;
+      ctx.globalAlpha = Math.max(0, a * 0.85);
+      circle(q.x, q.y, 2.2);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function cloud(cx, cy, k) {
+    circle(cx - 34 * k, cy + 6 * k, 20 * k);
+    circle(cx - 8 * k, cy - 8 * k, 28 * k);
+    circle(cx + 24 * k, cy - 2 * k, 24 * k);
+    circle(cx + 46 * k, cy + 8 * k, 17 * k);
+    ctx.fillRect(cx - 34 * k, cy + 6 * k, 80 * k, 19 * k);
+  }
+
+  function drawWeather() {
+    var a = S.rainA;
+    if (a < 0.01) return;
+    ctx.fillStyle = 'rgba(38,58,78,' + (0.2 * a) + ')'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = 'rgba(96,112,128,' + (0.95 * a) + ')';
+    var drift = reduce ? 0 : Math.sin(S.t * 0.3) * 6;
+    cloud(250 + drift, 40, 1.15); cloud(480 - drift, 32, 1.4); cloud(690 + drift, 44, 1.1);
+    ctx.strokeStyle = 'rgba(190,225,250,' + (0.8 * a) + ')'; ctx.lineWidth = 1.5; ctx.lineCap = 'round';
+    for (var i = 0; i < S.drops.length; i++) {
+      var q = S.drops[i];
+      line(q.x, q.y, q.x - 3, q.y + q.len);
+    }
+  }
+
+  function bubble(x, y, text, on) {
+    ctx.font = '600 12px "IBM Plex Mono", monospace';
+    var w = ctx.measureText(text).width + 20;
+    var bx = Math.max(6, Math.min(W - w - 6, x - w / 2));
+    var by = Math.max(4, y - 26);
+    ctx.fillStyle = '#ffffff'; ctx.strokeStyle = on ? '#1b78bf' : '#9db0ab'; ctx.lineWidth = 1.5;
+    rr(bx, by, w, 24, 8); ctx.fill(); ctx.stroke();
+    var tx = Math.max(bx + 12, Math.min(bx + w - 12, x));
+    ctx.beginPath(); ctx.moveTo(tx - 5, by + 24); ctx.lineTo(tx, by + 31); ctx.lineTo(tx + 5, by + 24); ctx.closePath();
+    ctx.fillStyle = '#ffffff'; ctx.fill();
+    ctx.strokeStyle = on ? '#1b78bf' : '#9db0ab';
+    line(tx - 5, by + 24, tx, by + 31); line(tx, by + 31, tx + 5, by + 24);
+    ctx.fillStyle = on ? '#1b78bf' : '#1b2927'; ctx.textAlign = 'center';
+    ctx.fillText(text, bx + w / 2, by + 16);
+  }
+
+  function drawAgent() {
+    var x = S.ax, y = S.ay, f = S.face, t = S.t;
+    var mv = S.moving, bob = mv ? Math.abs(Math.sin(t * 11)) * 2.2 : 0;
+    var sw = mv ? Math.sin(t * 11) * 4 : 0;
+    ctx.lineCap = 'round';
+    ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.beginPath(); ctx.ellipse(x, y + 1, 12, 4, 0, 0, 6.2832); ctx.fill();
+    // piernas
+    ctx.strokeStyle = '#33425e'; ctx.lineWidth = 4.5;
+    line(x - 4, y - 12 - bob, x - 4 + sw, y); line(x + 4, y - 12 - bob, x + 4 - sw, y);
+    // torso
+    ctx.fillStyle = '#d65a31'; rr(x - 9, y - 35 - bob, 18, 24, 6); ctx.fill();
+    ctx.fillStyle = '#33425e'; rr(x - 9, y - 22 - bob, 18, 11, 4); ctx.fill();
+    // brazos
+    ctx.strokeStyle = '#d65a31'; ctx.lineWidth = 4;
+    if (S.irrigating) {
+      var a = S.wheel;
+      var h1x = 101 + Math.cos(a) * 10, h1y = 118 + Math.sin(a) * 10;
+      var h2x = 101 - Math.cos(a) * 10, h2y = 118 - Math.sin(a) * 10;
+      line(x - 8, y - 31 - bob, h1x, h1y); line(x + 8, y - 31 - bob, h2x, h2y);
+      ctx.fillStyle = '#e9b78d'; circle(h1x, h1y, 2.8); circle(h2x, h2y, 2.8);
+    } else {
+      line(x - 9, y - 31 - bob, x - 12, y - 19 - bob + sw * 0.6);
+      line(x + 9, y - 31 - bob, x + 12, y - 19 - bob - sw * 0.6);
+    }
+    // cabeza y sombrero
+    ctx.fillStyle = '#e9b78d'; circle(x, y - 42 - bob, 8);
+    ctx.fillStyle = '#1b2927'; circle(x + f * 3, y - 42 - bob, 1.3);
+    ctx.fillStyle = '#e3b84d';
+    ctx.beginPath(); ctx.ellipse(x, y - 47 - bob, 15, 4, 0, 0, 6.2832); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(x, y - 51 - bob, 7.5, 6, 0, 0, 6.2832); ctx.fill();
+    ctx.fillStyle = '#c0532f'; rr(x - 7.5, y - 51 - bob, 15, 2.5, 1); ctx.fill();
+    if (S.decision) bubble(x, y - 66 - bob, S.decision, S.decision === ACTIVAR);
+  }
+
+  function draw() {
+    ctx.setTransform(K, 0, 0, K, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#a9c98b'; ctx.fillRect(0, 0, W, H);
+    drawSun();
+    drawTree();
+    drawField();
+    for (var i = 0; i < PL.length; i++) plant(PL[i]);
+    drawPipes();
+    drawValve();
+    drawSensor();
+    drawParticles();
+    drawWeather();
+    drawAgent();
+  }
+
+  // ---------- Lógica del juego ----------
+  var logEl = $('log'), decEl = $('dec'), statEl = $('stat');
+  var lIf = $('l-if'), lA1 = $('l-a1'), lElif = $('l-elif'), lA2 = $('l-a2'), lElse = $('l-else'), lA3 = $('l-a3');
+
+  function addLog(r, lluvia, acc) {
+    var li = document.createElement('li');
+    li.className = acc === ACTIVAR ? 'on' : 'off';
+    li.innerHTML = '<span>Humedad detectada: ' + r + '%</span><span>Esta lloviendo? ' + (lluvia ? 'True' : 'False') + '</span><span class="d">Decisión del agente: ' + acc + '</span>';
+    logEl.insertBefore(li, logEl.firstChild);
+    while (logEl.children.length > 40) logEl.removeChild(logEl.lastChild);
+  }
+
+  var RAMAS = { 1: [lIf, lA1], 2: [lElif, lA2], 3: [lElse, lA3] };
+
+  function sense() {
+    var r = Math.round(S.h);
+    var acc = agenteRiego(r, S.rain);
+    var on = acc === ACTIVAR;
+    S.decision = acc;
+    S.reading = r;
+    addLog(r, S.rain, acc);
+    decEl.textContent = acc;
+    decEl.className = 'dec ' + (on ? 'on' : 'off');
+    [1, 2, 3].forEach(function (k) {
+      RAMAS[k].forEach(function (el) { el.classList.toggle('on', k === rama); });
+    });
+    lElif.classList.toggle('ev', rama >= 2);
+    lElse.classList.toggle('ev', rama === 3);
+  }
+
+  function spawn() {
+    HEADS.forEach(function (h) {
+      for (var k = 0; k < 2; k++) {
+        if (S.parts.length > 700) return;
+        var a = S.t * 5 + k * Math.PI + (Math.random() - 0.5) * 0.35;
+        var sp = 60 + Math.random() * 70;
+        S.parts.push({ x: h.x, y: h.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, l: 0, max: 0.55 + Math.random() * 0.35 });
+      }
+    });
+  }
+
+  function update(dt) {
+    S.t += dt;
+    S.sense -= dt;
+    if (S.sense <= 0) { S.sense = 1; sense(); }
+
+    var tg = S.decision === ACTIVAR ? POST : HOME;
+    var dx = tg.x - S.ax, dy = tg.y - S.ay, d = Math.hypot(dx, dy);
+    if (d > 2) {
+      var st = Math.min(d, 150 * dt);
+      S.ax += dx / d * st; S.ay += dy / d * st;
+      S.moving = true;
+      if (Math.abs(dx) > 1) S.face = dx > 0 ? 1 : -1;
+    } else {
+      S.moving = false;
+    }
+    var atPost = Math.hypot(POST.x - S.ax, POST.y - S.ay) < 3;
+    S.irrigating = S.decision === ACTIVAR && atPost;
+
+    S.spray += ((S.irrigating ? 1 : 0) - S.spray) * Math.min(1, dt * 6);
+    if (S.irrigating) S.wheel += dt * 3.5;
+
+    if (S.irrigating) S.h += 4 * dt;
+    if (S.rain) S.h += 1.2 * dt;
+    if (S.evap && !S.rain) S.h -= S.rate * dt;
+    S.h = Math.max(0, Math.min(100, S.h));
+
+    S.hpS += (healthTarget() - S.hpS) * Math.min(1, dt * 1.6);
+
+    S.rainA += ((S.rain ? 1 : 0) - S.rainA) * Math.min(1, dt * 3);
+    if (S.rainA > 0.3) {
+      for (var n = 0; n < 4 && S.drops.length < 140; n++) {
+        S.drops.push({ x: Math.random() * (W + 40), y: 30 + Math.random() * 20, v: 380 + Math.random() * 120, len: 9 + Math.random() * 6, end: 90 + Math.random() * 390 });
+      }
+    }
+    for (var j = S.drops.length - 1; j >= 0; j--) {
+      var dr = S.drops[j];
+      dr.y += dr.v * dt; dr.x -= 36 * dt;
+      if (dr.y > dr.end) S.drops.splice(j, 1);
+    }
+
+    if (S.spray > 0.25) spawn();
+    for (var i = S.parts.length - 1; i >= 0; i--) {
+      var q = S.parts[i];
+      q.x += q.vx * dt; q.y += q.vy * dt; q.l += dt;
+      if (q.l > q.max) S.parts.splice(i, 1);
+    }
+  }
+
+  // ---------- Panel ----------
+  var hv = $('hv'), bar = $('bar'), sl = $('sl'), slo = $('slo');
+  var lastR = -1, lastStat = '', drag = false;
+
+  function ui() {
+    var r = Math.round(S.h);
+    if (r !== lastR) {
+      lastR = r;
+      hv.textContent = r;
+      bar.style.width = r + '%';
+      bar.className = r < UMBRAL ? '' : 'ok';
+      slo.textContent = r + '%';
+      if (!drag) sl.value = r;
+    }
+    var s;
+    if (S.irrigating) s = 'Regando toda la parcela';
+    else if (S.decision === ACTIVAR) s = 'Yendo a abrir la llave';
+    else if (S.moving) s = 'Volviendo a su sombra';
+    else if (S.rain && S.reading < UMBRAL) s = 'Llueve: no riega, la lluvia moja el suelo';
+    else s = 'En reposo';
+    if (s !== lastStat) { lastStat = s; statEl.textContent = s; }
+  }
+
+  sl.addEventListener('pointerdown', function () { drag = true; });
+  window.addEventListener('pointerup', function () { drag = false; });
+  window.addEventListener('pointercancel', function () { drag = false; });
+  sl.addEventListener('input', function () { S.h = parseFloat(sl.value); });
+  sl.addEventListener('change', function () { S.sense = 0; });
+
+  var rainBox = $('lluvia');
+  rainBox.addEventListener('change', function () { S.rain = rainBox.checked; S.sense = 0; });
+
+  Array.prototype.forEach.call(document.querySelectorAll('.preset'), function (b) {
+    b.addEventListener('click', function () {
+      S.h = parseFloat(b.getAttribute('data-v'));
+      S.rain = b.getAttribute('data-r') === '1';
+      rainBox.checked = S.rain;
+      sol.checked = false; syncSol();
+      S.sense = 0;
+    });
+  });
+
+  var sol = $('sol'), vels = document.querySelectorAll('input[name="vel"]');
+  function syncSol() {
+    S.evap = sol.checked;
+    Array.prototype.forEach.call(vels, function (v) { v.disabled = !sol.checked; });
+  }
+  sol.addEventListener('change', syncSol);
+  Array.prototype.forEach.call(vels, function (v) {
+    v.addEventListener('change', function () { if (v.checked) S.rate = parseFloat(v.value); });
+  });
+  syncSol();
+
+  // ---------- Bucle ----------
+  var last = 0;
+  function frame(now) {
+    var dt = last ? Math.min(0.05, (now - last) / 1000) : 0.016;
+    last = now;
+    update(dt);
+    draw();
+    ui();
+    requestAnimationFrame(frame);
+  }
+
+  fit();
+  if (window.ResizeObserver) new ResizeObserver(fit).observe(cv);
+  else window.addEventListener('resize', fit);
+  requestAnimationFrame(frame);
+})();
+</script>
+
+</body></html>
